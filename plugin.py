@@ -7,8 +7,13 @@
 #   3.0.0: Third release: complete rewrite of requesting details and creating devices. Delete alle devices and delete the 'devicetable.txt file within de plugin folder.
 #   3.0.2: Bug resolved
 #   3.0.4: Bug when using Domoticz container
+#   3.0.5: Added some checks and USL16LP. New switch added to enable or disable status changes of the internal devices. Phone changes are still reported in the log.
+#   3.0.6: Added UAP U6-Enterprise and UDR. Not sure if UDR works with the plugin
+#   3.0.7: Add code (for testing) to solve SSL errors
+#   3.0.8: Added UniFi Switch Flex
+#   4.0.0: Changed start sequence.
 """
-<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="3.0.4" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
+<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.0" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
     <description>
         <h2>Unifi Presence Detection plugin</h2><br/>
         This plugin reads the Unifi Controller information such as the sensors on the Unifi Gateway.
@@ -76,6 +81,7 @@ class BasePlugin:
     hostAuth = False
     UNIFI_ANYONE_HOME_UNIT = 1
     UNIFI_OFF_DELAY = 2
+    UNIFI_UPDATE_LOG = 3
     UNIFI_OVERRIDE_UNIT = 255
     _Cookies = None
     _csrftoken = None
@@ -103,6 +109,7 @@ class BasePlugin:
     u_name_total_found = ""
     u_name_total = ""
     devUnit_found = 0
+    _log_devices = False
     UnifiDevicesNames = {
         #Device Code, Device Type, Device Name
         "BZ2":       ("uap",       "UniFi AP"),
@@ -124,6 +131,7 @@ class BasePlugin:
         "U7NHD":     ("uap",       "UniFi AP-nanoHD"),
         "UAL6":      ("uap",       "UniFi AP-U6-Lite"),
         "UAP6MP":    ("uap",       "UniFi WiFi 6 Pro"),
+        "U6ENT":     ("uap",       "UniFi AP-U6-Enterprise"),
         "UFLHD":     ("uap",       "UniFi AP-Flex-HD"),
         "UHDIW":     ("uap",       "UniFi AP-HD-In Wall"),
         "UCXG":      ("uap",       "UniFi AP-XG"),
@@ -148,6 +156,7 @@ class BasePlugin:
         "USL8LP":    ("usw",       "Unifi Switch Lite 8 PoE"),
         "US16P150":  ("usw",       "UniFi Switch 16 POE-150W"),
         "USL16P":    ("usw",       "UniFi Switch 16 150W"),
+        "USL16LP":   ("usw",       "Unifi Switch Lite 16 PoE"),
         "S216150":   ("usw",       "UniFi Switch 16 AT-150W"),
         "US24":      ("usw",       "UniFi Switch 24"),
         "US24P250":  ("usw",       "UniFi Switch 24 POE-250W"),
@@ -155,6 +164,7 @@ class BasePlugin:
         "US24P500":  ("usw",       "UniFi Switch 24 POE-500W"),
         "S224250":   ("usw",       "UniFi Switch 24 AT-250W"),
         "S224500":   ("usw",       "UniFi Switch 24 AT-500W"),
+        "USL24P":    ("usw",       "UniFi Switch 24 PoE gen 2"),
         "US48":      ("usw",       "UniFi Switch 48"),
         "US48P500":  ("usw",       "UniFi Switch 48 POE-500W"),
         "US48PL2":   ("usw",       "UniFi Switch 48 L2 POE"),
@@ -164,6 +174,7 @@ class BasePlugin:
         "US6XG150":  ("usw",       "UniFi Switch 6XG POE-150W"),
         "USXG":      ("usw",       "UniFi Switch 16XG"),
         "USMINI":    ("usw",       "Unifi Switch Flex Mini"),
+        "USF5P":     ("usw",       "UniFi Switch Flex"),
         "UGW3":      ("ugw",       "UniFi Security Gateway 3P"),
         "UGW4":      ("ugw",       "UniFi Security Gateway 4P"),
         "UGWHD4":    ("ugw",       "UniFi Security Gateway HD"),
@@ -175,7 +186,10 @@ class BasePlugin:
         "UP5c":      ("uph",       "UniFi Phone"),
         "UP5tc":     ("uph",       "UniFi Phone-Pro"),
         "UP7c":      ("uph",       "UniFi Phone-Executive"),
+        "UDR":       ("udm",       "Unifi Dream Router"),
         "UDMPRO":    ("udm",       "Unifi Dream Machine Pro"),
+        "UDMPROSE":  ("udm",       "Unifi Dream Machine Pro SE"),
+        "UDMSE":     ("udm",       "Unifi Dream Machine SE"),
         "UDM":       ("udm",       "Unifi Dream Machine")
         }
     uap = []
@@ -248,97 +262,17 @@ class BasePlugin:
 
         # create devices
         self.login()
-        if self._current_status_code == 200:
-            self.detectUnifiDevices()
-            self.create_devices()
-
-            # Create table
-            #               0           1         2           3        4              5            6       7
-            #           Phone_Name | MAC_ID | Unit_Number | State | Last Online | Check Online | Status | Time
-            #             Test      1:1:1:1     50           Off      No             No          Online
-            #             Test                  50           Off      No             Yes         Way
-            #             Test                  50           On       Yes            Yes         Offline
-            #             Test                  50           On       Yes            No          None
-            #             Test                  50           Off      No             No
-            # Step 1      User A    1:1:1:1     110          Off      No             No          Offline
-            # Step 2      User A    1:1:1:1     110          Off      No             No          Offline
-
-            # Step 1      User A    1:1:1:1     110          Off      No             Yes         Offline
-            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
-
-            # Step 1      User A    1:1:1:1     110          Off      Yes            Yes         Offline
-            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
-
-            # Step 1      User A    1:1:1:1     110          On       Yes            No          Online
-            # Step 2      User A    1:1:1:1     110          Off      No             No          Wait     11:30
-            # Step 3      User A    1:1:1:1     110          Off      No             No          Offline
-
-            # Step 1      User A    1:1:1:1     110          On       Yes            Yes         Online
-            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
-            device_mac=Parameters["Mode2"].split(",")
-            w, h = 8, self.total_devices_count;
-            self.Matrix = [[0 for x in range(w)] for y in range(h)]
-
-            count = 1
-            found_user = None
-            self.Matrix[0][0] = "OverRide"            # Used for the OverRide Selector Switch
-            self.Matrix[0][1] = "00:00:00:00:00:00"   # Used for the OverRide Selector Switch
-            self.Matrix[0][2] = 255                   # Used for the OverRide Selector Switch
-            self.Matrix[0][3] = "Off"                 # Used for the OverRide Selector Switch
-            self.Matrix[0][4] = "No"                  # Used for the OverRide Selector Switch
-            self.Matrix[0][5] = "No"                  # Used for the OverRide Selector Switch
-            self.Matrix[0][6] = "None"                  # Used for the OverRide Selector Switch
-            for device in device_mac:
-                device = device.strip()
-                Device_Name, Device_Mac = device.split("=")
-                self.Matrix[count][0] = Device_Name
-                self.Matrix[count][1] = Device_Mac.lower()
-                Device_Unit = None
-                self.Matrix[count][3] = "Off"
-                self.Matrix[count][4] = "No"
-                self.Matrix[count][5] = "No"
-                self.Matrix[count][6] = "None"
-                found_user = Device_Name
-                for dv in Devices:
-                    # Find the unit number
-                    search_phone = Devices[dv].Name
-                    position = len(self._plugin_name)+3
-                    if Devices[dv].Name[position:] == found_user:
-                        self.Matrix[count][2] = Devices[dv].Unit
-                        count = count + 1
-                        #continue
-                if Parameters["Mode3"] == "Yes":
-                    self.Matrix[count][0] = "Geo "+Device_Name
-                    self.Matrix[count][1] = "11:11:11:11:11:11"
-                    Device_Unit = None
-                    self.Matrix[count][3] = "Off"
-                    self.Matrix[count][4] = "No"
-                    self.Matrix[count][5] = "GEO"
-                    self.Matrix[count][6] = "None"
-                    found_user = "Geo "+Device_Name
-                    for dv in Devices:
-                        # Find the unit number
-                        devName = Devices[dv].Name
-                        position = len(self._plugin_name)+3
-                        if Devices[dv].Name[position:] == found_user:
-                            self.Matrix[count][2] = Devices[dv].Unit
-                            self.Matrix[count][3] = Devices[dv].sValue
-                            self.Matrix[count][5] = "GEO"
-                            Domoticz.Log(strName+"Geo Phone with name '"+found_user+"' is detected from config.")
-                            count = count + 1
-                            #continue
-
-            # report the phone and geofencing devices
-            x = range(0, self.total_devices_count, 1)
-            for n in x:
-                Domoticz.Log(strName+"Phone Naam = "+str(self.Matrix[n][0])+" | "+str(self.Matrix[n][1])+" | "+str(self.Matrix[n][2])+" | "+str(self.Matrix[n][3])+" | "+str(self.Matrix[n][4])+" | "+str(self.Matrix[n][5]))
-
-            #self.devicesPerAP()
-
+        
         if Devices[self.UNIFI_OFF_DELAY].nValue == 0:
             self._Off_Delay = 0
         else:
             self._Off_Delay = Devices[self.UNIFI_OFF_DELAY].nValue + 20
+
+        if Devices[self.UNIFI_UPDATE_LOG].sValue == "On":
+            self._log_devices = True
+        else:
+            self._log_devices = False
+
         Domoticz.Heartbeat(5)
 
     def onStop(self):
@@ -406,6 +340,13 @@ class BasePlugin:
                     self._Off_Delay = Level + 20 #seconds
                     Domoticz.Debug(strName+"Off Delay = "+str(self._Off_Delay))
                     UpdateDevice(self.UNIFI_OFF_DELAY, Level, str(Level))
+                if self.UNIFI_UPDATE_LOG == Unit:
+                    if Command == "On":
+                        UpdateDevice(self.UNIFI_UPDATE_LOG, 1, "On")
+                        self._log_devices = True
+                    elif Command == "Off":
+                        UpdateDevice(self.UNIFI_UPDATE_LOG, 0, "Off")
+                        self._log_devices = False
 
 
                 t = self.total_devices_count - self.count_g_device
@@ -442,7 +383,7 @@ class BasePlugin:
 
 
                 for x in range(self.total_devices_count):
-                    Domoticz.Debug(strName+" "+str(x)+" Phone Naam = "+self.Matrix[x][0]+" | "+str(self.Matrix[x][1])+" | "+str(self.Matrix[x][2])+" | "+self.Matrix[x][3]+" | "+self.Matrix[x][4]+" | "+self.Matrix[x][5])
+                    Domoticz.Debug(strName+" "+str(x)+" Phone Naam = "+str(self.Matrix[x][0])+" | "+str(self.Matrix[x][1])+" | "+str(self.Matrix[x][2])+" | "+str(self.Matrix[x][3])+" | "+str(self.Matrix[x][4])+" | "+str(self.Matrix[x][5]))
 
             self.onHeartbeat()
 
@@ -483,8 +424,7 @@ class BasePlugin:
             if self._current_status_code == 200:
                 Domoticz.Debug(strName+'Requesting Unifi Controller details')
                 self.request_details()
-                if self._current_status_code == 200:
-                    self.request_online_phones()
+                self.request_online_phones()
 
 
     def getCookies(cookie_jar, domain):
@@ -530,6 +470,7 @@ class BasePlugin:
                 Domoticz.Log(strName+"Login successful into "+controller)
                 self._Cookies = r.cookies
                 self._lastloginfailed = False
+                self.InitAfterLogin()
             elif self._current_status_code == 400:
                 Domoticz.Error(strName+"Failed to log in to api ("+controller+") with provided credentials ("+str(self._current_status_code)+")")
             #elif self._current_status_code == 404:
@@ -543,8 +484,15 @@ class BasePlugin:
                     Domoticz.Log(strName+"First attempt failed to login to the "+controller+"(URL="+self._baseurl+") with errorcode "+str(self._current_status_code))
                     self._lastloginfailed = True
                     self._current_status_code = 999
+        except requests.exceptions.ReadTimeout:
+            r.status.code = "Read Timeout"
+            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+        except requests.exceptions.ConnectionError:
+            r.status_code = "Connection refused"
+            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
+            self.login()
         except:
-            Domoticz.Error("Login failed")
+            Domoticz.Error("Login failed. If it's first attemp then oke, otherwise there is something wrong")
 
     def logout(self):
         strName = "logout: "
@@ -565,9 +513,107 @@ class BasePlugin:
                 self._session.close()
                 self._current_status_code = 999
                 self._timeout_timer = None
+        except requests.exceptions.ReadTimeout:
+            r.status.code = "Read Timeout"
+            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+        except requests.exceptions.ConnectionError:
+            r.status_code = "Connection refused"
+            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
         except:
             Domoticz.Error("Logout failure")
 
+    def InitAfterLogin(self):
+        if self._current_status_code == 200:
+            self.detectUnifiDevices()
+            self.create_devices()
+
+            # Create table
+            #               0           1         2           3        4              5            6       7
+            #           Phone_Name | MAC_ID | Unit_Number | State | Last Online | Check Online | Status | Time
+            #             Test      1:1:1:1     50           Off      No             No          Online
+            #             Test                  50           Off      No             Yes         Way
+            #             Test                  50           On       Yes            Yes         Offline
+            #             Test                  50           On       Yes            No          None
+            #             Test                  50           Off      No             No
+            # Step 1      User A    1:1:1:1     110          Off      No             No          Offline
+            # Step 2      User A    1:1:1:1     110          Off      No             No          Offline
+
+            # Step 1      User A    1:1:1:1     110          Off      No             Yes         Offline
+            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
+
+            # Step 1      User A    1:1:1:1     110          Off      Yes            Yes         Offline
+            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
+
+            # Step 1      User A    1:1:1:1     110          On       Yes            No          Online
+            # Step 2      User A    1:1:1:1     110          Off      No             No          Wait     11:30
+            # Step 3      User A    1:1:1:1     110          Off      No             No          Offline
+
+            # Step 1      User A    1:1:1:1     110          On       Yes            Yes         Online
+            # Step 2      User A    1:1:1:1     110          On       Yes            No          Online
+            device_mac=Parameters["Mode2"].split(",")
+            w, h = 8, self.total_devices_count;
+            self.Matrix = [[0 for x in range(w)] for y in range(h)]
+
+            count = 1
+            found_user = None
+            self.Matrix[0][0] = "OverRide"            # Used for the OverRide Selector Switch
+            self.Matrix[0][1] = "00:00:00:00:00:00"   # Used for the OverRide Selector Switch
+            self.Matrix[0][2] = 255                   # Used for the OverRide Selector Switch
+            self.Matrix[0][3] = "Off"                 # Used for the OverRide Selector Switch
+            self.Matrix[0][4] = "No"                  # Used for the OverRide Selector Switch
+            self.Matrix[0][5] = "No"                  # Used for the OverRide Selector Switch
+            self.Matrix[0][6] = "None"                  # Used for the OverRide Selector Switch
+            for device in device_mac:
+                device = device.strip()
+                Device_Name, Device_Mac = device.split("=")
+                self.Matrix[count][0] = Device_Name
+                Device_Mac = Device_Mac.lower().strip()
+                if re.match("[0-9a-f]{2}([-:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", Device_Mac):
+                    if Device_Mac.lower() == "00:00:00:00:00:00":
+                        Domoticz.Error(strName+"Problem with phone '"+Device_Name+"' with mac address '"+Device_Mac+"'")
+                        self.versionCheck = False
+                else:
+                    Domoticz.Error(strName+"Not a valid mac address '"+Device_Mac+"'")
+                self.Matrix[count][1] = Device_Mac
+                Device_Unit = None
+                self.Matrix[count][3] = "Off"
+                self.Matrix[count][4] = "No"
+                self.Matrix[count][5] = "No"
+                self.Matrix[count][6] = "None"
+                found_user = Device_Name
+                for dv in Devices:
+                    # Find the unit number
+                    search_phone = Devices[dv].Name
+                    position = len(self._plugin_name)+3
+                    if Devices[dv].Name[position:] == found_user:
+                        self.Matrix[count][2] = Devices[dv].Unit
+                        count = count + 1
+                        #continue
+                if Parameters["Mode3"] == "Yes":
+                    self.Matrix[count][0] = "Geo "+Device_Name
+                    self.Matrix[count][1] = "11:11:11:11:11:11"
+                    Device_Unit = None
+                    self.Matrix[count][3] = "Off"
+                    self.Matrix[count][4] = "No"
+                    self.Matrix[count][5] = "GEO"
+                    self.Matrix[count][6] = "None"
+                    found_user = "Geo "+Device_Name
+                    for dv in Devices:
+                        # Find the unit number
+                        devName = Devices[dv].Name
+                        position = len(self._plugin_name)+3
+                        if Devices[dv].Name[position:] == found_user:
+                            self.Matrix[count][2] = Devices[dv].Unit
+                            self.Matrix[count][3] = Devices[dv].sValue
+                            self.Matrix[count][5] = "GEO"
+                            Domoticz.Log(strName+"Geo Phone with name '"+found_user+"' is detected from config.")
+                            count = count + 1
+                            #continue
+
+            # report the phone and geofencing devices
+            x = range(0, self.total_devices_count, 1)
+            for n in x:
+                Domoticz.Log(strName+"Phone Naam = "+str(self.Matrix[n][0])+" | "+str(self.Matrix[n][1])+" | "+str(self.Matrix[n][2])+" | "+str(self.Matrix[n][3])+" | "+str(self.Matrix[n][4])+" | "+str(self.Matrix[n][5]))
 
 
     def get_attribute(data, attribute, default_value):
@@ -659,11 +705,11 @@ class BasePlugin:
                                     if isinstance(value, float):
                                         value = round(value, 2)
                                     if device_found == 1:
-                                        UpdateDevice(devUnit, int(float(value)), str(value))
+                                        UpdateDevice(devUnit, int(float(value)), str(value), self._log_devices)
                                     elif value != "" and device_found == 0:
                                         #create device
                                         self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
-                                        UpdateDevice(self.devUnit_found, int(float(value)), str(value))
+                                        UpdateDevice(self.devUnit_found, int(float(value)), str(value), self._log_devices)
                                 elif len(j_json) == 6:
                                     value = item["" +j_json[3]+ ""]
                                     if j_json[0] == "udm":
@@ -673,18 +719,22 @@ class BasePlugin:
                                                 if isinstance(value, float):
                                                     value = round(value, 2)
                                                 if device_found == 1:
-                                                    UpdateDevice(devUnit, int(float(value)), str(value))
+                                                    UpdateDevice(devUnit, int(float(value)), str(value), self._log_devices)
                                                 elif device_found == 0:
                                                     #create device
                                                     self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
-                                                    UpdateDevice(self.devUnit_found, int(float(value)), str(value))
+                                                    UpdateDevice(self.devUnit_found, int(float(value)), str(value), self._log_devices)
                                     elif j_json == "ugw":
                                         Domoticz.Error("Send the API output: '/api/s/default/stat/device' (Unifi Controller) or '/proxy/network/api/s/{}/stat/device' (Dreammachine)")
                             except:
                                 pass
-        except requests.ReadTimeout:
+        except requests.exceptions.ReadTimeout:
+            r.status.code = "Read Timeout"
             Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
-
+        except requests.exceptions.ConnectionError:
+            r.status_code = "Connection refused"
+            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
+            self.login()
 
     def is_non_zero_file(self, fpath):  
         return os.path.isfile(fpath) and os.path.getsize(fpath) > 0
@@ -751,8 +801,13 @@ class BasePlugin:
             elif self._current_status_code == 404:
                 Domoticz.Log(strName+"Invalid login, or login has expired")
                 self.login()
-        except requests.ReadTimeout:
+        except requests.exceptions.ReadTimeout:
+            r.status.code = "Read Timeout"
             Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+        except requests.exceptions.ConnectionError:
+            r.status_code = "Connection refused"
+            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
+            self.login()
 
 
     def block_phone(self, phone_name, mac):
@@ -818,8 +873,11 @@ class BasePlugin:
                 self.Matrix[x][5] = "No"
                 self.Matrix[x][6] = "Offline"
                 self.Matrix[x][7] = ""
-                if Devices[self.Matrix[x][2]].nValue != 0:
-                    UpdateDevice(self.Matrix[x][2], nvalueOff, svalueOff)
+                try:
+                    if Devices[self.Matrix[x][2]].nValue != 0:
+                        UpdateDevice(self.Matrix[x][2], nvalueOff, svalueOff)
+                except:
+                    self.create_devices()
             elif self.Matrix[x][3] == "Off" and self.Matrix[x][4] == "No" and self.Matrix[x][5] == "Yes":
                 Domoticz.Log(strName+"Phone '"+self.Matrix[x][0]+"' connected to the Unifi Controller")
                 self.Matrix[x][3] = "On"
@@ -980,6 +1038,13 @@ class BasePlugin:
             Domoticz.Device(Name="Off Delay", Unit=self.UNIFI_OFF_DELAY, TypeName="Selector Switch", Switchtype=18, Used=1, Options=Options, Description=Description, Image=9).Create()
             UpdateDevice(self.UNIFI_OFF_DELAY, 0, "0")
 
+        if (self.UNIFI_UPDATE_LOG not in Devices):
+            Description = "Turn the logging of the Unifi Devices On or Off. Doesn't apply to phones."
+            Domoticz.Device(Name="Log",  Unit=self.UNIFI_UPDATE_LOG, Used=1, TypeName="Switch", Description=Description, Image=2).Create()
+            UpdateDevice(self.UNIFI_UPDATE_LOG, 1, "On")
+
+
+
         # create phone devices
         device_mac=Parameters["Mode2"].split(",")
 
@@ -990,6 +1055,7 @@ class BasePlugin:
             phone_name, mac_id = device.split("=")
             phone_name = phone_name.strip()
             mac_id = mac_id.strip().lower()
+            found_phone = False
             try:
                 for item in Devices:
                     position = len(self._plugin_name)+3
@@ -1098,19 +1164,22 @@ def DumpHTTPResponseToLog(httpResp, level=0):
 def is_whole(n):
     return n % 1 == 0
 
-def UpdateDevice(Unit, nValue, sValue, Image=None):
+def UpdateDevice(Unit, nValue, sValue, Log=True, Image=None):
     strName = "UpdateDevice: "
     # Make sure that the Domoticz device still exists (they can be deleted) before updating it
     if (Unit in Devices):
         if (Devices[Unit].nValue != nValue) or (Devices[Unit].sValue != sValue) or ((Image != None) and (Image != Devices[Unit].Image)):
             if (Image != None) and (Image != Devices[Unit].Image):
-                Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+") Image="+str(Image))
+                if Unit >= 80 and Log:
+                    Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+") Image="+str(Image))
+                elif Unit < 80:
+                    Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+") Image="+str(Image))
                 Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue), Image=Image)
-                #Domoticz.Log(strName+"Update "+str(nValue)+":'"+str(nValue)+"' ("+Devices[Unit].Name+") Image="+str(Image))
-                #Domoticz.Log(strName+"Update "+str(sValue)+":'"+str(sValue)+"' ("+Devices[Unit].Name+") Image="+str(Image))
             else:
-                #Domoticz.Log(strName+"Update  - Old nValue = "+str(Devices[Unit].nValue)+" To New nValue = "+str(nValue)+" ("+Devices[Unit].Name+")")
-                Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+")")
+                if Unit >= 80 and Log:
+                    Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+") Image="+str(Image))
+                elif Unit < 80:
+                    Domoticz.Log(strName+"Update (sValue): "+str(Devices[Unit].sValue)+" --> "+str(sValue)+" ("+Devices[Unit].Name+") Image="+str(Image))
                 Devices[Unit].Update(nValue=int(nValue), sValue=str(sValue))
 
     # Generic helper functions

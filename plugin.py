@@ -191,7 +191,7 @@ class BasePlugin:
         "UDMPRO":    ("udm",       "Unifi Dream Machine Pro"),
         "UDMPROSE":  ("udm",       "Unifi Dream Machine Pro SE"),
         "UDMSE":     ("udm",       "Unifi Dream Machine SE"),
-        "UDM":       ("udm",       "Unifi Dream Machine",),
+        "UDM":       ("udm",       "Unifi Dream Machine"),
         "UXG":       ("uxg",       "UXG",)
         }
     uap = []

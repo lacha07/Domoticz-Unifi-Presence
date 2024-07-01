@@ -66,6 +66,7 @@ import requests
 import urllib
 import time
 import os
+import urllib3
 from requests import Session
 from typing import Pattern, Dict, Union
 from datetime import datetime
@@ -190,7 +191,7 @@ class BasePlugin:
         "UDMPRO":    ("udm",       "Unifi Dream Machine Pro"),
         "UDMPROSE":  ("udm",       "Unifi Dream Machine Pro SE"),
         "UDMSE":     ("udm",       "Unifi Dream Machine SE"),
-        "UDM":       ("udm",       "Unifi Dream Machine"),
+        "UDM":       ("udm",       "Unifi Dream Machine",),
         "UXG":       ("uxg",       "UXG",)
         }
     uap = []
@@ -624,6 +625,9 @@ class BasePlugin:
     def request_details(self):
         strName = "request_details: "
         oke = 0
+        self._session.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         try:
             if Parameters["Mode4"] == "unificontroller":
                 try:
@@ -769,6 +773,8 @@ class BasePlugin:
 
     def request_online_phones(self):
         strName = "request_online_phones: "
+        self._session.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         try:
             if Parameters["Mode4"] == "unificontroller":
                 r = self._session.get("{}/api/s/{}/stat/sta".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)

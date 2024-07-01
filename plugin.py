@@ -448,6 +448,7 @@ class BasePlugin:
         self._verify_ssl = False
         self._baseurl = "https://"+Parameters["Address"]+":"+Parameters["Port"]
         self._session = Session()
+        self._session.verify = False
         try:
             if Parameters["Mode4"] == "unificontroller":
                 self._session.headers.update({'Content-Type' : 'application/json'})

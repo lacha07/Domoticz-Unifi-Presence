@@ -12,6 +12,8 @@
 #   3.0.7: Add code (for testing) to solve SSL errors
 #   3.0.8: Added UniFi Switch Flex
 #   4.0.0: Changed start sequence.
+#   4.0.1: Added JWT/session retry logic and avoided reinitializing devices on re-login.
+#          Also improved maintainability with function docstrings and corrected indentation.
 """
 <plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.0" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
     <description>
@@ -192,7 +194,8 @@ class BasePlugin:
         "UDMPROSE":  ("udm",       "Unifi Dream Machine Pro SE"),
         "UDMSE":     ("udm",       "Unifi Dream Machine SE"),
         "UDM":       ("udm",       "Unifi Dream Machine"),
-        "UXG":       ("uxg",       "UXG",)
+        "UXG":       ("uxg",       "UXG"),
+        "U7PRO":     ("udm",       "Unifi AP  7 Pro"),
         }
     uap = []
     usw = []
@@ -201,9 +204,11 @@ class BasePlugin:
     udm = []
 
     def __init__(self):
+        self._devices_initialized = False
         return
 
     def onStart(self):
+        """Initialize the plugin and attempt the first connection."""
         strName = "onStart: "
         Domoticz.Debug(strName+"called")
 
@@ -278,6 +283,7 @@ class BasePlugin:
         Domoticz.Heartbeat(5)
 
     def onStop(self):
+        """Clean up before the plugin stops."""
         strName = "onStop: "
         Domoticz.Debug(strName+"Pluggin is stopping.")
         self.logout()
@@ -290,6 +296,7 @@ class BasePlugin:
         Domoticz.Debug(strName+"Description = "+str(Description))
 
     def onMessage(self, Connection, Data):
+        """Handles incoming messages from the UniFi controller."""
         strName = "onMessage: "
         Domoticz.Debug(strName+"called")
         DumpHTTPResponseToLog(Data)
@@ -303,6 +310,7 @@ class BasePlugin:
             self.onHeartbeat()
 
     def onCommand(self, Unit, Command, Level, Hue):
+        """Handles commands received from Domoticz UI."""
         strName = "onCommand: "
         Domoticz.Log(strName+"called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
         if self.versionCheck is True:
@@ -400,6 +408,7 @@ class BasePlugin:
         Domoticz.Debug(strName+"called")
 
     def onHeartbeat(self):
+        """Periodically called by Domoticz to maintain plugin state."""
         strName = "onHeartbeat: "
         Domoticz.Debug(strName+"called")
         if self.versionCheck is True:
@@ -455,12 +464,12 @@ class BasePlugin:
             if Parameters["Mode4"] == "unificontroller":
                 self._session.headers.update({'Content-Type' : 'application/json'})
                 self._session.headers.update({'Connection' : 'keep-alive'})
-                r = self._session.post("{}/api/login".format(self._baseurl), data=json.dumps(self._login_data), verify=self._verify_ssl, timeout=4000)
+                r = self._request_with_retry("post", "{}/api/auth/login".format(self._baseurl), data=json.dumps(self._login_data), verify=self._verify_ssl, timeout=4000)
                 controller = "Unifi Controller"
             elif Parameters["Mode4"] == "dreammachinepro":
                 self._session.headers.update({'Content-Type' : 'application/json'})
                 self._session.headers.update({'Connection' : 'keep-alive'})
-                r = self._session.post("{}/api/auth/login".format(self._baseurl), data=json.dumps(self._login_data), verify=self._verify_ssl, timeout=4000)
+                r = self._request_with_retry("post", "{}/api/auth/login".format(self._baseurl), data=json.dumps(self._login_data), verify=self._verify_ssl, timeout=4000)
                 if 'X-CSRF-Token' in r.headers:
                     self._session.headers.update({'X-CSRF-Token': r.headers['X-CSRF-Token']})
                     Domoticz.Log(strName+"X-SCRF-Token found and added to header")
@@ -506,10 +515,10 @@ class BasePlugin:
         try:
             if self._current_status_code == 200:
                 if Parameters["Mode4"] == "unificontroller":
-                    self._session.post("{}/logout".format(self._baseurl, verify=self._verify_ssl))
+                    self._request_with_retry("post", "{}/logout".format(self._baseurl, verify=self._verify_ssl))
                 elif Parameters["Mode4"] == "dreammachinepro":
-                    #self._session.post("{}/proxy/network/logout".format(self._baseurl, verify=self._verify_ssl))
-                    self._session.post("{}/api/auth".format(self._baseurl, verify=self._verify_ssl))
+                    #self._request_with_retry("post", "{}/proxy/network/logout".format(self._baseurl, verify=self._verify_ssl))
+                    self._request_with_retry("post", "{}/api/auth".format(self._baseurl, verify=self._verify_ssl))
                 else:
                     Domoticz.Error("Check configuration!!")
                 Domoticz.Log(strName+"Logout of the Unifi API")
@@ -527,8 +536,10 @@ class BasePlugin:
 
     def InitAfterLogin(self):
         if self._current_status_code == 200:
-            self.detectUnifiDevices()
-            self.create_devices()
+            if not self._devices_initialized:
+                self.detectUnifiDevices()
+                self.create_devices()
+                self._devices_initialized = True
 
             # Create table
             #               0           1         2           3        4              5            6       7
@@ -631,13 +642,13 @@ class BasePlugin:
         try:
             if Parameters["Mode4"] == "unificontroller":
                 try:
-                    r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                    r = self._request_with_retry("get", "{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
                 except:
                     Domoticz.Error("Problem retrieving data. Trying to login...")
                     self._lastloginfailed = True
                     oke = 1
             elif Parameters["Mode4"] == "dreammachinepro":
-                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._request_with_retry("get", "{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
             else:
                 Domoticz.Error("Check configuration!!")
         
@@ -777,9 +788,9 @@ class BasePlugin:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         try:
             if Parameters["Mode4"] == "unificontroller":
-                r = self._session.get("{}/api/s/{}/stat/sta".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._request_with_retry("get", "{}/api/s/{}/stat/sta".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
             elif Parameters["Mode4"] == "dreammachinepro":
-                r = self._session.get("{}/proxy/network/api/s/{}/stat/sta".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._request_with_retry("get", "{}/proxy/network/api/s/{}/stat/sta".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
             else:
                 Domoticz.Error("Check configuration!!")
             self._current_status_code = r.status_code
@@ -823,9 +834,9 @@ class BasePlugin:
         self._block_data['cmd'] ='block-sta'
         self._block_data['mac'] = mac
         if Parameters["Mode4"] == "unificontroller":
-            r = self._session.post("{}/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
+            r = self._request_with_retry("post", "{}/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
         elif Parameters["Mode4"] == "dreammachinepro":
-            r = self._session.post("{}/proxy/network/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
+            r = self._request_with_retry("post", "{}/proxy/network/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
         else:
             Domoticz.Error("Check configuration!!")
 
@@ -844,9 +855,9 @@ class BasePlugin:
         self._block_data['cmd'] ='unblock-sta'
         self._block_data['mac'] = mac
         if Parameters["Mode4"] == "unificontroller":
-            r = self._session.post("{}/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
+            r = self._request_with_retry("post", "{}/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
         elif Parameters["Mode4"] == "dreammachinepro":
-            r = self._session.post("{}/proxy/network/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
+            r = self._request_with_retry("post", "{}/proxy/network/api/s/{}/cmd/stamgr".format(self._baseurl, self._site, verify=self._verify_ssl), data=json.dumps(self._block_data), verify=self._verify_ssl).status_code
         else:
             Domoticz.Error("Check configuration!!")
 
@@ -957,9 +968,9 @@ class BasePlugin:
         strName = "detect Unifi Devices: "
         try:
             if Parameters["Mode4"] == "unificontroller":
-                r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._request_with_retry("get", "{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
             elif Parameters["Mode4"] == "dreammachinepro":
-                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._request_with_retry("get", "{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
             else:
                 Domoticz.Error("Check configuration!!")
             self._current_status_code = r.status_code

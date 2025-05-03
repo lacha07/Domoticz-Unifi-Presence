@@ -1,93 +1,93 @@
 # !!!!Fork from the original, not really a proactive maintenance just try to unlock my Domoticz and publish result in this repo .
 
+
 # Domoticz-Unifi-Presence
-This plugin detects devices - usualy phone(s) - on a Unifi (Controller) network. When a phone is detected on the network it turns on the corresponding switch. If the switch AnyOne is Off it will be turned on. If the last configured phone is off, the switch AnyOne will be switched off.
 
-Be aware that some phones have the ability to mask their MAC address.This can be configured in the Wi-Fi settings of the phone. To use this plugin the connection to the Wi-Fi network must be done with the real MAC address of the phone.
+## 🛰️ UniFi Presence Detection Plugin for Domoticz
 
-Normal use without the option to block a configured user:
+This Domoticz plugin allows presence detection using a UniFi Controller, Dream Machine Pro, or CloudKey Gen2.  
+It tracks devices (e.g., smartphones) connected to your network and can trigger actions in Domoticz based on their presence.
 
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/AnyOne.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/OverRide.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/User%20A.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/User%20B.png)
+---
 
-With the option to block a configured user:
+## ✅ Features
 
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/User%20A%20Block.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/User%20B%20Block.png)
+- Detects presence based on MAC address association.
+- Supports UniFi Controller and Dream Machine Pro (via appropriate login endpoints).
+- Supports geofencing via virtual devices.
+- **NEW (v4.0.1):**
+  - Automatic re-login when UniFi session expires (`HTTP 401`).
+  - Prevents device reinitialization on re-login (no more unwanted ON/OFF switches).
+  - Code cleaned up for better maintainability and readability (docstrings added).
 
-With the option for Geofencing devices:
+---
 
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Geo%20User%20A.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Geo%20User%20B.png)
+## 🧰 Requirements
 
-Hardware information:
-It's tested in this setup: Controller, Gateway, Switch, Access Points.
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/LAN%20Counter.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Uptime.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Gateway%20Mem.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Gateway%20CPU.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/WLAN%20Counter.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Gateway%20PHY.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Gateway%20CPU%20Temperature.png)
-![ble_tag](https://raw.githubusercontent.com/Wizzard72/Domoticz-Unifi-Presence/master/image/Gateway%20Board%20CPU%20Temperature.png)
+- Domoticz with Python plugin support
+- Python 3.6+
+- `requests` module
+- Access to UniFi Controller or Dream Machine/CloudKey Gen2
 
+---
 
+## 🚀 Installation
 
-## Versions
+1. Clone this repository into the `plugins` directory of Domoticz:
+    ```bash
+    git clone https://github.com/lacha07/Domoticz-Unifi-Presence.git
+    ```
 
-    1.0.0: First release
-    2.0.0: New connection code, new function to block and unblock user devices
+2. Restart Domoticz:
+    ```bash
+    sudo systemctl restart domoticz
+    ```
 
-## Introduction
-There is a good Dzvents script, but I wanted to create a plugin for this. 
-This plugin works with this setup (all three present):
- - Unifi Controller installed on a Raspberry Pi 3b
- - Unifi Gateway
- - Unifi Switch
- - Unifi Access Points
+3. In the Domoticz interface, go to **Hardware** and add a new device:
+    - Type: *Unifi Presence Detection*
+    - IP Address: Your controller IP
+    - Port: `8443` (or custom if changed)
+    - Username / Password: your UniFi credentials
+    - Site: `default` or as configured
+    - Device list: comma-separated MAC addresses and names
 
-## Installation
+---
 
-The plugin is tested to works with the Unifi Controller installed on a Raspberry Pi 3b.
+## 🔄 Upgrade Notes (v4.0.1)
 
-### Prerequisite:
-  - A working Unifi Controller setup. Tested with version 6.0.36.
+- 🛡️ Plugin now handles **expired sessions automatically** and retries login without impacting Domoticz behavior.
+- 🧠 Added logic to **only initialize devices on first login**, preventing "flickering" of presence switches.
+- ⚙️ Improved reliability for long-running systems.
 
-### Install plugin on Domoticz (only Linux is supported)
-To install the plugin login to the Raspberry Pi (SSH / Putty).
-  
-        cd /home/<username>/domoticz/plugin
-  
-        git clone https://github.com/Wizzard72/Domoticz-Unifi-Presence
-      
-        sudo systemctl restart domoticz.service
+---
 
-Go to the hardware tab in Domoticz and select by field Type: Unifi Presence.
-Fill in all fields:
-| Field | Information|
-| ----- | ---------- |
-| IP Address / DNS name of the Unifi Controller: | The IP Address or the DNS name of the Unifi Controller portal. |
-| Port: | The port number of the Unifi Controller Portal. |
-| Username: | An Unifi administrator account. |
-| Password: | The password of the Unifi Administrator. |
-| Site Name:  | The Unifi Site name. |
-| MAC Phone Addresses: | The MAC addresses of the phones to be detected. Syntax: User A=00:00:00:00:00:00,User B=11:11:11:11:11:11 |
-| Enable Geofencing devices: | This creates Geofencing devices for the configured phones |
-| Interval in seconds: | The  interval to query the Unifi Controller. |
-| Posibility to block devices from the network?: | The ability to block and unblock devices from the Unifi Controller. |
-| Debug: | Debug information. |
+## 📦 Versions
 
+| Version | Notes |
+|---------|-------|
+| 1.0.0 - 3.0.8 | Original versions by Wizzard72 |
+| 4.0.0 | Changed startup sequence |
+| **4.0.1** | ✅ Added 401 retry, device init guard, improved comments and docstrings |
 
-## Update
-Update plugin to latest version:
+---
 
-        cd /home/<username>/domoticz/plugin
-  
-        git pull
-      
-        In Domoticz Hardware page: Disable the Alarm System for Domoticz plugin
-        
-        In Domoticz Hardware page: Enable the Alarm System for Domoticz plugin
+## 📞 Example MAC List
+
+```
+Phone1=1A:2B:3C:4D:5E:6F,Phone2=7A:8B:9C:AD:BE:CF
+```
+
+---
+
+## 🤝 Acknowledgements
+
+- Original author: **Wizzard72**
+- Maintenance and improvements: **lacha07**
+- Thanks to the Domoticz community for support and feedback
+
+---
+
+## 📜 License
+
+MIT License
 

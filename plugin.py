@@ -195,6 +195,7 @@ class BasePlugin:
         "UXG":       ("uxg",       "UXG"),
         "UKPW":      ("uap",       "UniFi AP"),
         "UAPA6A5":   ("uap",       "UniFi U7 In-Wall"),
+        "U7PRO":     ("uap",       "UniFi U7 Pro"),
         }
     uap = []
     usw = []

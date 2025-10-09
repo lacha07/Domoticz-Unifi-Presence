@@ -58,9 +58,9 @@ The plugin is tested to works with the Unifi Controller installed on a Raspberry
 ### Install plugin on Domoticz (only Linux is supported)
 To install the plugin login to the Raspberry Pi (SSH / Putty).
   
-        cd /home/<username>/domoticz/plugin
+        cd /home/<username>/domoticz/plugins
   
-        git clone https://github.com/Wizzard72/Domoticz-Unifi-Presence
+        git clone https://github.com/lacha07/Domoticz-Unifi-Presence
       
         sudo systemctl restart domoticz.service
 

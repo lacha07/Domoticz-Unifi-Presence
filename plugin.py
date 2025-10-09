@@ -192,7 +192,10 @@ class BasePlugin:
         "UDMPROSE":  ("udm",       "Unifi Dream Machine Pro SE"),
         "UDMSE":     ("udm",       "Unifi Dream Machine SE"),
         "UDM":       ("udm",       "Unifi Dream Machine"),
-        "UXG":       ("uxg",       "UXG",)
+        "UXG":       ("uxg",       "UXG"),
+        "UKPW":      ("uap",       "UniFi AP"),
+        "UAPA6A5":   ("uap",       "UniFi U7 In-Wall"),
+        "U7PRO":     ("uap",       "UniFi U7 Pro"),
         }
     uap = []
     usw = []
@@ -999,8 +1002,8 @@ class BasePlugin:
                                 self.udm.append(self.UnifiDevicesNames[deviceCode][1]+","+item['name'])
                         Domoticz.Log(strName+"Found Unifi Device: "+deviceName+" ("+deviceCode+")")
                     except KeyError:
-                        Domoticz.Error(strName+"Unifi device ("+deviceCode+") is not present in the table.")
-                        self.setVersionCheck(False, "detectUnifiDevices")
+                        Domoticz.Error(strName+"Unifi device ("+deviceCode+") is not present in the table. Device will be ignored but plugin will continue to work.")
+                        # Continue processing other devices instead of stopping the plugin
             elif self._current_status_code == 401:
                 Domoticz.Log(strName+"Invalid login, or login has expired")
         except requests.ReadTimeout:

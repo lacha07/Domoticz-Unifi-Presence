@@ -898,15 +898,22 @@ class BasePlugin:
                         phone_name, mac_id = device.split("=")
                         phone_name = phone_name.strip()
                         mac_id = mac_id.strip().lower()
-                        if str(item['mac']) == mac_id and not item['is_wired'] and 'disconnect_timestamp' not in item:
-                            # Found MAC address in API output and device is still connected
-                            Domoticz.Log(strName+"Found device: "+phone_name+" with MAC "+mac_id)
-                            for x in range(self.total_devices_count):
-                                if self.Matrix[x][1] == mac_id:
-                                    self.Matrix[x][5] = "Yes"
-                                    Domoticz.Log(strName+"Updated Matrix for "+phone_name)
-                        elif str(item['mac']) == mac_id and 'disconnect_timestamp' in item:
-                            Domoticz.Log(strName+"Device "+phone_name+" is disconnected (timestamp: "+str(item['disconnect_timestamp'])+")")
+                        if str(item['mac']) == mac_id and not item['is_wired']:
+                            # Check if device is truly connected by comparing timestamps
+                            is_connected = True
+                            if 'disconnect_timestamp' in item and 'last_seen' in item:
+                                # Device is connected if last_seen is more recent than disconnect_timestamp
+                                is_connected = item['last_seen'] > item['disconnect_timestamp']
+                            
+                            if is_connected:
+                                # Found MAC address in API output and device is still connected
+                                Domoticz.Log(strName+"Found device: "+phone_name+" with MAC "+mac_id+" (connected)")
+                                for x in range(self.total_devices_count):
+                                    if self.Matrix[x][1] == mac_id:
+                                        self.Matrix[x][5] = "Yes"
+                                        Domoticz.Log(strName+"Updated Matrix for "+phone_name)
+                            else:
+                                Domoticz.Log(strName+"Device "+phone_name+" is disconnected (last_seen: "+str(item.get('last_seen', 'N/A'))+", disconnect: "+str(item.get('disconnect_timestamp', 'N/A'))+")")
                 self.ProcessDevices()
             elif self._current_status_code == 401:
                 Domoticz.Log(strName+"Invalid login, or login has expired")

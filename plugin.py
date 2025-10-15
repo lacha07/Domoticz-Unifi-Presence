@@ -898,11 +898,15 @@ class BasePlugin:
                         phone_name, mac_id = device.split("=")
                         phone_name = phone_name.strip()
                         mac_id = mac_id.strip().lower()
-                        if str(item['mac']) == mac_id and not item['is_wired']:
-                            # Found MAC address in API output
+                        if str(item['mac']) == mac_id and not item['is_wired'] and 'disconnect_timestamp' not in item:
+                            # Found MAC address in API output and device is still connected
+                            Domoticz.Log(strName+"Found device: "+phone_name+" with MAC "+mac_id)
                             for x in range(self.total_devices_count):
                                 if self.Matrix[x][1] == mac_id:
                                     self.Matrix[x][5] = "Yes"
+                                    Domoticz.Log(strName+"Updated Matrix for "+phone_name)
+                        elif str(item['mac']) == mac_id and 'disconnect_timestamp' in item:
+                            Domoticz.Log(strName+"Device "+phone_name+" is disconnected (timestamp: "+str(item['disconnect_timestamp'])+")")
                 self.ProcessDevices()
             elif self._current_status_code == 401:
                 Domoticz.Log(strName+"Invalid login, or login has expired")

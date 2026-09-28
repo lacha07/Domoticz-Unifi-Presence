@@ -559,7 +559,8 @@ class BasePlugin:
                     Domoticz.Log(strName+"X-SCRF-Token found and added to header")
                 controller = "Dream Machine Pro"
             else:
-                Domoticz.Error(strName+"Check configuration!!")
+                Domoticz.Error(strName+"Check configuration!! Type de controleur inconnu: "+str(Parameters["Mode4"]))
+                return
 
             self._current_status_code = r.status_code
             if self._current_status_code == 200:
@@ -582,12 +583,9 @@ class BasePlugin:
                     self._lastloginfailed = True
                     self._current_status_code = 999
         except requests.exceptions.ReadTimeout:
-            r.status.code = "Read Timeout"
-            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+            Domoticz.Error(strName+"Request to "+Parameters["Mode4"]+" timed out.")
         except requests.exceptions.ConnectionError:
-            r.status_code = "Connection refused"
-            Domoticz.Error(r.status.code+" to "+Parameters["Mode4"])
-            self.login()
+            Domoticz.Error(strName+"Connection refused to "+Parameters["Mode4"])
         except requests.exceptions.Timeout:
             Domoticz.Error("Login timeout - controller may be unreachable")
         except requests.exceptions.RequestException as e:
@@ -616,15 +614,14 @@ class BasePlugin:
                 self._current_status_code = 999
                 self._timeout_timer = None
         except requests.exceptions.ReadTimeout:
-            r.status.code = "Read Timeout"
-            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+            Domoticz.Error(strName+"Request to "+Parameters["Mode4"]+" timed out.")
         except requests.exceptions.ConnectionError:
-            r.status_code = "Connection refused"
-            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
-        except:
-            Domoticz.Error("Logout failure")
+            Domoticz.Error(strName+"Connection refused to "+Parameters["Mode4"])
+        except Exception as e:
+            Domoticz.Error(strName+"Logout failure: "+str(e))
 
     def InitAfterLogin(self):
+        strName = "InitAfterLogin: "
         if self._current_status_code == 200:
             if self._devices_initialized == False:
                 self.detectUnifiDevices()
@@ -732,13 +729,13 @@ class BasePlugin:
         try:
             if Parameters["Mode4"] == "unificontroller":
                 try:
-                    r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                    r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site), verify=self._verify_ssl, cookies=self._Cookies)
                 except:
                     Domoticz.Error("Problem retrieving data. Trying to login...")
                     self._lastloginfailed = True
                     oke = 1
             elif Parameters["Mode4"] == "dreammachinepro":
-                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site), verify=self._verify_ssl, cookies=self._Cookies)
             else:
                 Domoticz.Error("Check configuration!!")
         
@@ -836,11 +833,9 @@ class BasePlugin:
                             except:
                                 pass
         except requests.exceptions.ReadTimeout:
-            r.status.code = "Read Timeout"
-            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+            Domoticz.Error(strName+"Request to "+Parameters["Mode4"]+" timed out.")
         except requests.exceptions.ConnectionError:
-            r.status_code = "Connection refused"
-            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
+            Domoticz.Error(strName+"Connection refused to "+Parameters["Mode4"])
             self.login()
 
     def is_non_zero_file(self, fpath):  
@@ -934,11 +929,9 @@ class BasePlugin:
                 Domoticz.Log(strName+"Invalid login, or login has expired")
                 self.login()
         except requests.exceptions.ReadTimeout:
-            r.status.code = "Read Timeout"
-            Domoticz.Error("Request to " +Parameters["Mode4"]+" timed out.")
+            Domoticz.Error(strName+"Request to "+Parameters["Mode4"]+" timed out.")
         except requests.exceptions.ConnectionError:
-            r.status_code = "Connection refused"
-            Domoticz.Error(r.status.code+" to "+Paramters["Mode4"])
+            Domoticz.Error(strName+"Connection refused to "+Parameters["Mode4"])
             self.login()
 
 
@@ -1081,9 +1074,9 @@ class BasePlugin:
         strName = "detect Unifi Devices: "
         try:
             if Parameters["Mode4"] == "unificontroller":
-                r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._session.get("{}/api/s/{}/stat/device".format(self._baseurl, self._site), verify=self._verify_ssl, cookies=self._Cookies)
             elif Parameters["Mode4"] == "dreammachinepro":
-                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site, verify=self._verify_ssl), cookies=self._Cookies)
+                r = self._session.get("{}/proxy/network/api/s/{}/stat/device".format(self._baseurl, self._site), verify=self._verify_ssl, cookies=self._Cookies)
             else:
                 Domoticz.Error("Check configuration!!")
             self._current_status_code = r.status_code
@@ -1120,7 +1113,7 @@ class BasePlugin:
                             if 'name' not in item:
                                 self.udm.append(self.UnifiDevicesNames[deviceCode][1]+","+item['model'])
                             elif 'name' in item:
-                                self.udm.append(self.UnifiDevicesNames[deviceCode][1]+","+item['name'])
+                                self.udm.append(self.UnifiDevicesNames[deviceCode][1]+","+item['model']+","+item['name'])
                         Domoticz.Log(strName+"Found Unifi Device: "+deviceName+" ("+deviceCode+")")
                     except KeyError:
                         Domoticz.Error(strName+"Unifi device ("+deviceCode+") is not present in the table. Device will be ignored but plugin will continue to work.")

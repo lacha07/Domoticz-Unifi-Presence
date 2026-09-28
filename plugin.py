@@ -12,8 +12,13 @@
 #   3.0.7: Add code (for testing) to solve SSL errors
 #   3.0.8: Added UniFi Switch Flex
 #   4.0.0: Changed start sequence.
+#   4.0.1: Added UAP U7 In-Wall and U7 Pro. Improved error handling.
+#   4.0.2: Fixed stability issues. Ignore disconnected devices in presence detection,
+#          with a 5 minute grace period to avoid false negatives.
+#   4.0.3: Added USW Flex 2.5G 8 PoE (USWED37). Fixed a NameError in InitAfterLogin that
+#          was masked as a login failure, plus several broken exception handlers.
 """
-<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.0" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
+<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.3" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
     <description>
         <h2>Unifi Presence Detection plugin</h2><br/>
         This plugin reads the Unifi Controller information such as the sensors on the Unifi Gateway.
@@ -179,6 +184,7 @@ class BasePlugin:
         "USXG":      ("usw",       "UniFi Switch 16XG"),
         "USMINI":    ("usw",       "Unifi Switch Flex Mini"),
         "USF5P":     ("usw",       "UniFi Switch Flex"),
+        "USWED37":   ("usw",       "UniFi Switch Flex 2.5G 8 PoE"),
         "UGW3":      ("ugw",       "UniFi Security Gateway 3P"),
         "UGW4":      ("ugw",       "UniFi Security Gateway 4P"),
         "UGWHD4":    ("ugw",       "UniFi Security Gateway HD"),

@@ -899,11 +899,23 @@ class BasePlugin:
                         phone_name = phone_name.strip()
                         mac_id = mac_id.strip().lower()
                         if str(item['mac']) == mac_id and not item['is_wired']:
-                            # Check if device is truly connected by comparing timestamps
+                            # Check if device is truly connected by looking at multiple indicators
                             is_connected = True
-                            if 'disconnect_timestamp' in item and 'last_seen' in item:
-                                # Device is connected if last_seen is more recent than disconnect_timestamp
-                                is_connected = item['last_seen'] > item['disconnect_timestamp']
+                            
+                            # Check if device has disconnect_timestamp and no recent activity
+                            if 'disconnect_timestamp' in item:
+                                # If there's a disconnect timestamp, check if device is really active
+                                current_time = int(time.time())
+                                disconnect_time = item['disconnect_timestamp']
+                                last_seen = item.get('last_seen', 0)
+                                
+                                # Device is disconnected if:
+                                # 1. Disconnect timestamp exists AND
+                                # 2. Last seen is not more recent than disconnect timestamp AND
+                                # 3. Disconnect happened more than 5 minutes ago (to avoid false positives)
+                                if (last_seen <= disconnect_time and 
+                                    (current_time - disconnect_time) > 300):
+                                    is_connected = False
                             
                             if is_connected:
                                 # Found MAC address in API output and device is still connected

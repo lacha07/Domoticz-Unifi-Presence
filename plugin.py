@@ -17,8 +17,12 @@
 #          with a 5 minute grace period to avoid false negatives.
 #   4.0.3: Added USW Flex 2.5G 8 PoE (USWED37). Fixed a NameError in InitAfterLogin that
 #          was masked as a login failure, plus several broken exception handlers.
+#   4.0.4: Mode5 becomes a list of combinable options. New 'onlymac' mode skips the
+#          AP/switch/gateway details entirely: no CPU or memory devices are created
+#          or updated, as those are better collected over SNMP. 'block' keeps the
+#          historical behaviour and the legacy "Yes" value is still accepted.
 """
-<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.3" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
+<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.4" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
     <description>
         <h2>Unifi Presence Detection plugin</h2><br/>
         This plugin reads the Unifi Controller information such as the sensors on the Unifi Gateway.
@@ -43,10 +47,12 @@
                 <option label="Dream Machine Pro/CloudKey-Gen2" value="dreammachinepro"/>
             </options>
         </param>
-        <param field="Mode5" label="Posibility to block devices from the network?" width="75px">
+        <param field="Mode5" label="Optional features" width="300px">
             <options>
-                <option label="Yes" value="Yes"/>
-                <option label="No" value="No"  default="true" />
+                <option label="None" value="none"  default="true" />
+                <option label="Block devices from the network" value="block"/>
+                <option label="Only MAC address detection (no AP/switch devices)" value="onlymac"/>
+                <option label="Block devices + only MAC address detection" value="block,onlymac"/>
             </options>
         </param>
         <param field="Mode6" label="Debug" width="75px">
@@ -76,6 +82,25 @@ from requests import Session
 from typing import Pattern, Dict, Union
 from datetime import datetime
 # https://ubntwiki.com/products/software/unifi-controller/api
+
+
+def _mode5Value():
+    """Valeur brute de Mode5, en minuscules. Peut contenir plusieurs options
+    separees par des virgules (ex. "block,onlymac")."""
+    return (Parameters["Mode5"] or "").strip().lower()
+
+
+def blockDevicesEnabled():
+    """Blocage reseau demande ? Accepte l ancienne valeur "Yes"."""
+    m = _mode5Value()
+    return m == "yes" or "block" in m
+
+
+def onlyMacEnabled():
+    """Ne traiter que la detection par adresse MAC : aucun device de CPU ni de
+    memoire n est cree ni mis a jour pour les AP, switchs et passerelles.
+    Ces mesures sont de toute facon mieux collectees en SNMP."""
+    return "onlymac" in _mode5Value()
 
 
 class BasePlugin:
@@ -371,7 +396,7 @@ class BasePlugin:
                         if self.Matrix[r][2] == Unit:
                             Domoticz.Debug(strName+"Unit = "+str(Unit))
                             if self.Matrix[r][5] == "Yes" or self.Matrix[r][5] == "No":
-                                if Parameters["Mode5"] == "Yes":
+                                if blockDevicesEnabled():
                                     if Level == 10: # 10 = BLOCK
                                         svalue = str(Level)
                                         nvalue = int(Level)
@@ -451,7 +476,10 @@ class BasePlugin:
 
             if self._current_status_code == 200:
                 Domoticz.Debug(strName+'Requesting Unifi Controller details')
-                self.request_details()
+                if not onlyMacEnabled():
+                    self.request_details()
+                else:
+                    Domoticz.Debug(strName+'Only MAC address detection: skipping AP/switch details')
                 self.request_online_phones()
 
 
@@ -986,7 +1014,7 @@ class BasePlugin:
 
     def ProcessDevices(self):
         strName = "ProcessDevices: "
-        if Parameters["Mode5"] == "No":
+        if not blockDevicesEnabled():
             svalueOn = "On"
             nvalueOn = 1
             svalueOff = "Off"
@@ -1200,7 +1228,7 @@ class BasePlugin:
                             count_phone = count_phone + 1
                 if found_phone == False:
                     new_unit_phone = find_available_unit_phone()
-                    if Parameters["Mode5"] == "Yes":
+                    if blockDevicesEnabled():
                         Options = {"LevelActions": "||||",
                         "LevelNames": "Off|Block|Unblock|On",
                         "LevelOffHidden": "false",

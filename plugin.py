@@ -17,8 +17,12 @@
 #          with a 5 minute grace period to avoid false negatives.
 #   4.0.3: Added USW Flex 2.5G 8 PoE (USWED37). Fixed a NameError in InitAfterLogin that
 #          was masked as a login failure, plus several broken exception handlers.
+#   4.0.4: Mode5 becomes a list of combinable options. New 'onlymac' mode skips the
+#          AP/switch/gateway details entirely: no CPU or memory devices are created
+#          or updated, as those are better collected over SNMP. 'block' keeps the
+#          historical behaviour and the legacy "Yes" value is still accepted.
 """
-<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.3" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
+<plugin key="UnifiPresence" name="Unifi Presence" author="Wizzard72" version="4.0.4" wikilink="https://github.com/Wizzard72/Domoticz-Unifi-Presence">
     <description>
         <h2>Unifi Presence Detection plugin</h2><br/>
         This plugin reads the Unifi Controller information such as the sensors on the Unifi Gateway.

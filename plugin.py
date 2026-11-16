@@ -239,6 +239,8 @@ class BasePlugin:
 
     def __init__(self):
         self._devices_initialized = False
+        self._invalid_device_table_entries = set()
+        self._unit_exhaustion_logged = set()
         return
 
     def onStart(self):
@@ -820,9 +822,16 @@ class BasePlugin:
                             self.u_name_total = u_name + " " + j_name[3:]
                             if self.is_non_zero_file(Parameters["HomeFolder"] + "devicetable.txt"):
                                 for devicetable in self._device_table:
-                                    devUnit, devName = devicetable.split(",")
+                                    try:
+                                        devUnit, devName = devicetable.split(",", 1)
+                                        devUnit = int(devUnit)
+                                    except ValueError:
+                                        invalid_entry = devicetable.strip()
+                                        if invalid_entry not in self._invalid_device_table_entries:
+                                            Domoticz.Error(strName+"Invalid device table entry '{}'; ignoring".format(invalid_entry))
+                                            self._invalid_device_table_entries.add(invalid_entry)
+                                        continue
                                     devName = devName.strip()
-                                    devUnit = int(devUnit)
                                     device_found = 0
                                     found_devUnit = 0
                                     if devName == self.u_name_total:
@@ -846,8 +855,9 @@ class BasePlugin:
                                         UpdateDevice(devUnit, int(float(value)), str(value), self._log_devices)
                                     elif value != "" and device_found == 0:
                                         #create device
-                                        self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
-                                        UpdateDevice(self.devUnit_found, int(float(value)), str(value), self._log_devices)
+                                        new_unit = self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
+                                        if new_unit is not None:
+                                            UpdateDevice(new_unit, int(float(value)), str(value), self._log_devices)
                                 elif len(j_json) == 6:
                                     value = item["" +j_json[3]+ ""]
                                     if j_json[0] == "udm":
@@ -860,8 +870,9 @@ class BasePlugin:
                                                     UpdateDevice(devUnit, int(float(value)), str(value), self._log_devices)
                                                 elif device_found == 0:
                                                     #create device
-                                                    self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
-                                                    UpdateDevice(self.devUnit_found, int(float(value)), str(value), self._log_devices)
+                                                    new_unit = self.create_device(j_json[0], self.u_name_total, j_json[1], j_json[2])
+                                                    if new_unit is not None:
+                                                        UpdateDevice(new_unit, int(float(value)), str(value), self._log_devices)
                                     elif j_json == "ugw":
                                         Domoticz.Error("Send the API output: '/api/s/default/stat/device' (Unifi Controller) or '/proxy/network/api/s/{}/stat/device' (Dreammachine)")
                             except:
@@ -889,6 +900,13 @@ class BasePlugin:
         elif un_type == "udm":
             new_unit = find_available_unit_udm()
 
+        if new_unit is None:
+            if un_name not in self._unit_exhaustion_logged:
+                Domoticz.Error(strName+"No available unit for device '"+un_name+"'.")
+                self._unit_exhaustion_logged.add(un_name)
+            return None
+
+        self._unit_exhaustion_logged.discard(un_name)
         if un_typename != "31":
             Domoticz.Log("Create device: " +un_name+" (type="+un_typename+")")
             Domoticz.Device(Name=un_name, Unit=new_unit, Used=1, TypeName=un_typename).Create()
@@ -900,6 +918,7 @@ class BasePlugin:
         #reload the devicetable.txt file
         f = open(Parameters["HomeFolder"] + "devicetable.txt")
         self._device_table = f.readlines()
+        return new_unit
 
     def request_online_phones(self):
         strName = "request_online_phones: "
